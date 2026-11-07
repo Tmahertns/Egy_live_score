@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>EGY TENNIS - System Gateway</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js" crossorigin></script>
+    <!-- XLSX Library for Reading Excel Files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Cairo', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .glow { box-shadow: 0 0 15px rgba(225, 29, 72, 0.4); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Base Points logic according to ITF Rules
+        const ITF_POINTS = ['0', '15', '30', '40', 'Ad'];
+
+        function App() {
+            const [view, setView] = useState('select'); // 'select', 'admin', 'umpire', 'spectator'
+            
+            // Shared App State (Simulating Realtime Central Database)
+            const [playersList, setPlayersList] = useState(['أحمد علي', 'محمد حسن', 'زياد محمود', 'عمر فاروق']);
+            const [refereesList, setRefereesList] = useState(['كابتن محمود', 'كابتن أحمد', 'كابتن سامح']);
+            const [courtsList, setCourtsList] = useState(['الملعب الرئيسي 1', 'ملعب 2', 'ملعب 3']);
+            
+            const [matches, setMatches] = useState(() => {
+                const saved = localStorage.getItem('egy_tennis_system_matches');
+                return saved ? JSON.parse(saved) : [];
+            });
+
+            const [selectedMatchId, setSelectedMatchId] = useState(null);
+
+            useEffect(() => {
+                localStorage.setItem('egy_tennis_system_matches', JSON.stringify(matches));
+            }, [matches]);
+
+            // Sync helper to update state across parts
+            const updateMatchState = (updatedMatch) => {
+                setMatches(prev => prev.map(m => m.id === updatedMatch.id ? updatedMatch : m));
+            };
+
+            const activeMatch = matches.find(m => m.id === selectedMatchId) || matches[0];
+
+            return (
+                <div class="min-h-screen flex flex-col max-w-md md:max-w-4xl mx-auto p-4">
+                    {/* Navigation Header */}
+                    <header class="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
+                        <div class="flex items-center space-x-2 space-x-reverse cursor-pointer" onClick={() => setView('select')}>
+                            <div class="w-9 h-9 rounded-full bg-rose-600 flex items-center justify-center font-black text-white glow">🎾</div>
+                            <div>
+                                <h1 class="font-extrabold text-base tracking-tight text-white leading-none">EGY TENNIS SYSTEM</h1>
+                                <p class="text-[10px] text-rose-500 font-bold uppercase">النظام الموحد للبطولات</p>
+                            </div>
+                        </div>
+
+                        <div class="flex bg-slate-900 border border-slate-800 p-1 rounded-xl text-xs font-bold">
+                            <button onClick={() => setView('admin')} class={`px-3 py-1.5 rounded-lg transition ${view==='admin'?'bg-rose-600 text-white':'text-slate-400'}`}>الأدمن</button>
+                            <button onClick={() => setView('umpire')} class={`px-3 py-1.5 rounded-lg transition ${view==='umpire'?'bg-rose-600 text-white':'text-slate-400'}`}>الحكم</button>
+                            <button onClick={() => setView('spectator')} class={`px-3 py-1.5 rounded-lg transition ${view==='spectator'?'bg-rose-600 text-white':'text-slate-400'}`}>المشاهدين</button>
+                        </div>
+                    </header>
+
+                    {/* View Switcher */}
+                    {view === 'select' && <GatewaySelection setView={setView} />}
+                    {view === 'admin' && (
+                        <AdminPanel 
+                            matches={matches} 
+                            setMatches={setMatches}
+                            playersList={playersList}
+                            setPlayersList={setPlayersList}
+                            refereesList={refereesList}
+                            setRefereesList={setRefereesList}
+                            courtsList={courtsList}
+                            setCourtsList={setCourtsList}
+                            setSelectedMatchId={setSelectedMatchId}
+                            setView={setView}
+                        />
+                    )}
+                    {view === 'umpire' && (
+                        <UmpirePanel 
+                            matches={matches} 
+                            activeMatch={activeMatch}
+                            setSelectedMatchId={setSelectedMatchId}
+                            updateMatchState={updateMatchState}
+                        />
+                    )}
+                    {view === 'spectator' && (
+                        <SpectatorPanel 
+                            matches={matches} 
+                            activeMatch={activeMatch}
+                            setSelectedMatchId={setSelectedMatchId}
+                        />
+                    )}
+                </div>
+            );
+        }
+
+        // --- 0. Gateway Selector Screen ---
+        function GatewaySelection({ setView }) {
+            return (
+                <div class="flex-1 flex flex-col justify-center space-y-4 py-8">
+                    <div class="text-center space-y-2 mb-4">
+                        <h2 class="text-xl font-extrabold text-white">اختر نظام الدخول</h2>
+                        <p class="text-xs text-slate-400">منظومة إدارة وتحكيم التنس بالوقت الفعلي</p>
+                    </div>
+
+                    <div onClick={() => setView('admin')} class="bg-slate-900 border border-slate-800 hover:border-rose-600/50 p-5 rounded-2xl cursor-pointer transition">
+                        <h3 class="font-bold text-rose-500 text-base">⚙️ لوحة الأدمن (إدارة البطولة)</h3>
+                        <p class="text-xs text-slate-400 mt-1">رفع كشف الإكسيل، جدولة المباريات، وتعيين الحكام والملاعب.</p>
+                    </div>
+
+                    <div onClick={() => setView('umpire')} class="bg-slate-900 border border-slate-800 hover:border-rose-600/50 p-5 rounded-2xl cursor-pointer transition">
+                        <h3 class="font-bold text-emerald-400 text-base">📱 تطبيق حكم الكرسي (الموبايل)</h3>
+                        <p class="text-xs text-slate-400 mt-1">تسجيل النقاط، الإرسال، الأخطاء والاحتساب بأسلوب ITF.</p>
+                    </div>
+
+                    <div onClick={() => setView('spectator')} class="bg-slate-900 border border-slate-800 hover:border-rose-600/50 p-5 rounded-2xl cursor-pointer transition">
+                        <h3 class="font-bold text-sky-400 text-base">📺 شاشة المشاهدين والجماهير</h3>
+                        <p class="text-xs text-slate-400 mt-1">متابعة النتائج، النقاط والأحداث مباشرة لحظة بلحظة.</p>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- 1. ADMIN PANEL ---
+        function AdminPanel({ matches, setMatches, playersList, setPlayersList, refereesList, setRefereesList, courtsList, setCourtsList, setSelectedMatchId, setView }) {
+            const [p1, setP1] = useState('');
+            const [p2, setP2] = useState('');
+            const [referee, setReferee] = useState('');
+            const [court, setCourt] = useState('');
+
+            // Reading Excel File
+            const handleExcelUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    const bstr = evt.target.result;
+                    const wb = XLSX.read(bstr, { type: 'binary' });
+                    const wsName = wb.SheetNames[0];
+                    const ws = wb.Sheets[wsName];
+                    const data = XLSX.utils.sheet_to_json(ws);
+
+                    // Extract players, referees, courts dynamically from Excel
+                    const players = [];
+                    const refs = [];
+                    const courts = [];
+
+                    data.forEach(row => {
+                        if (row['اللاعب']) players.push(row['اللاعب']);
+                        if (row['الحكم']) refs.push(row['الحكم']);
+                        if (row['الملعب']) courts.push(row['الملعب']);
+                    });
+
+                    if (players.length) setPlayersList([...new Set(players)]);
+                    if (refs.length) setRefereesList([...new Set(refs)]);
+                    if (courts.length) setCourtsList([...new Set(courts)]);
+
+                    alert('تم استيراد الكشوفات بنجاح من ملف الإكسيل!');
+                };
+                reader.readAsBinaryString(file);
+            };
+
+            const createMatch = (e) => {
+                e.preventDefault();
+                if (!p1 || !p2 || !referee || !court) {
+                    alert('برجاء اختيار كافة البيانات لتخطي الجدولة!');
+                    return;
+                }
+
+                const newMatch = {
+                    id: 'm-' + Date.now(),
+                    player1: p1,
+                    player2: p2,
+                    referee: referee,
+                    court: court,
+                    status: 'مجدولة',
+                    server: 'p1',
+                    sides: { right: 'p1', left: 'p2' },
+                    score: {
+                        p1Points: '0', p2Points: '0',
+                        p1Games: 0, p2Games: 0,
+                        p1Sets: 0, p2Sets: 0,
+                        isTiebreak: false,
+                        setsHistory: []
+                    },
+                    history: []
+                };
+
+                setMatches([newMatch, ...matches]);
+                setP1(''); setP2('');
+                alert('تم إنشاء المباراة بنجاح!');
+            };
+
+            return (
+                <div class="space-y-6">
+                    <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+                        <h3 class="font-extrabold text-rose-500 text-sm">📁 استيراد بيانات البطولة (Excel)</h3>
+                        <p class="text-xs text-slate-400">اختر ملف يحتوي على أعمدة ("اللاعب", "الحكم", "الملعب") لتحديث القوائم تلقائياً.</p>
+                        <input type="file" accept=".xlsx, .xls" onChange={handleExcelUpload} class="block w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-rose-950 file:text-rose-400 hover:file:bg-rose-900 cursor-pointer"/>
+                    </div>
+
+                    <form onSubmit={createMatch} class="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+                        <h3 class="font-extrabold text-white text-sm">➕ إضافة مباراة جديدة وتعيين الطاقم</h3>
+                        
+                        <div class="grid grid-cols-2 gap-3 text-xs">
+                            <div>
+                                <label class="block text-slate-400 mb-1">اللاعب الأول</label>
+                                <select value={p1} onChange={e=>setP1(e.target.value)} class="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white">
+                                    <option value="">اختر اللاعب</option>
+                                    {playersList.map((p,i)=><option key={i} value={p}>{p}</option>)}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-slate-400 mb-1">اللاعب الثاني</label>
+                                <select value={p2} onChange={e=>setP2(e.target.value)} class="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white">
+                                    <option value="">اختر اللاعب</option>
+                                    {playersList.map((p,i)=><option key={i} value={p}>{p}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 text-xs">
+                            <div>
+                                <label class="block text-slate-400 mb-1">حكم الكرسي المعتمد</label>
+                                <select value={referee} onChange={e=>setReferee(e.target.value)} class="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white">
+                                    <option value="">اختر الحكم</option>
+                                    {refereesList.map((r,i)=><option key={i} value={r}>{r}</option>)}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-slate-400 mb-1">تحديد الملعب</label>
+                                <select value={court} onChange={e=>setCourt(e.target.value)} class="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white">
+                                    <option value="">اختر الملعب</option>
+                                    {courtsList.map((c,i)=><option key={i} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full py-3 bg-rose-600 text-white font-bold rounded-xl text-xs hover:bg-rose-700 transition">إدراج المباراة بالجدول 🏁</button>
+                    </form>
+
+                    {/* Live Matches Overview Table */}
+                    <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+                        <h3 class="font-extrabold text-white text-sm">📊 جدول المباريات والمتابعة الحية</h3>
+                        <div class="space-y-2">
+                            {matches.map(m => (
+                                <div key={m.id} class="bg-slate-950 p-3 rounded-xl border border-slate-800 flex justify-between items-center text-xs">
+                                    <div>
+                                        <p class="font-bold text-white">{m.player1} vs {m.player2}</p>
+                                        <p class="text-[10px] text-slate-400">الملعب: {m.court} | الحكم: {m.referee}</p>
+                                    </div>
+                                    <div class="flex items-center space-x-2 space-x-reverse">
+                                        <span class="text-rose-400 font-extrabold">{m.score.p1Sets} - {m.score.p2Sets}</span>
+                                        <button onClick={() => { setSelectedMatchId(m.id); setView('umpire'); }} class="px-2.5 py-1 bg-slate-800 text-slate-300 rounded-lg text-[10px]">دخول الحكم 📱</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- 2. UMPIRE CHAIR PANEL (ITF Rules Applied) ---
+        function UmpirePanel({ matches, activeMatch, setSelectedMatchId, updateMatchState }) {
+            if (!activeMatch) return <div class="text-center py-10 text-xs text-slate-400">لا توجد مباريات مجدولة حالياً.</div>;
+
+            const addPoint = (winnerKey) => {
+                const loserKey = winnerKey === 'p1' ? 'p2' : 'p1';
+                const updated = JSON.parse(JSON.stringify(activeMatch));
+                const s = updated.score;
+
+                // Tiebreak logic
+                if (s.isTiebreak) {
+                    s[`${winnerKey}Tiebreak`] = (s[`${winnerKey}Tiebreak`] || 0) + 1;
+                    const p1Tb = s.p1Tiebreak || 0;
+                    const p2Tb = s.p2Tiebreak || 0;
+                    
+                    if ((p1Tb + p2Tb) % 2 === 1) {
+                        updated.server = updated.server === 'p1' ? 'p2' : 'p1';
+                    }
+
+                    if ((p1Tb >= 7 || p2Tb >= 7) && Math.abs(p1Tb - p2Tb) >= 2) {
+                        finishSet(winnerKey, updated);
+                    }
+                    updateMatchState(updated);
+                    return;
+                }
+
+                // Standard Point Progression
+                const winPts = s[`${winnerKey}Points`];
+                const losePts = s[`${loserKey}Points`];
+
+                if (winPts === '40' && losePts === '40') {
+                    s[`${winnerKey}Points`] = 'Ad';
+                } else if (winPts === 'Ad') {
+                    winGame(winnerKey, updated);
+                } else if (losePts === 'Ad') {
+                    s[`${loserKey}Points`] = '40';
+                    s[`${winnerKey}Points`] = '40';
+                } else if (winPts === '40' && losePts !== '40') {
+                    winGame(winnerKey, updated);
+                } else {
+                    const order = ['0', '15', '30', '40'];
+                    s[`${winnerKey}Points`] = order[order.indexOf(winPts) + 1];
+                }
+
+                updateMatchState(updated);
+            };
+
+            const winGame = (winnerKey, updated) => {
+                const s = updated.score;
+                s.p1Points = '0'; s.p2Points = '0';
+                s[`${winnerKey}Games`] += 1;
+                updated.server = updated.server === 'p1' ? 'p2' : 'p1';
+
+                const p1G = s.p1Games;
+                const p2G = s.p2Games;
+
+                if (p1G === 6 && p2G === 6) {
+                    s.isTiebreak = true;
+                    s.p1Tiebreak = 0; s.p2Tiebreak = 0;
+                } else if ((p1G >= 6 || p2G >= 6) && Math.abs(p1G - p2G) >= 2) {
+                    finishSet(winnerKey, updated);
+                }
+            };
+
+            const finishSet = (winnerKey, updated) => {
+                const s = updated.score;
+                s.setsHistory.push({ p1: s.p1Games, p2: s.p2Games });
+                s[`${winnerKey}Sets`] += 1;
+                s.p1Games = 0; s.p2Games = 0;
+                s.isTiebreak = false;
+            };
+
+            const swapSides = () => {
+                const updated = JSON.parse(JSON.stringify(activeMatch));
+                const currentRight = updated.sides.right;
+                updated.sides.right = updated.sides.left;
+                updated.sides.left = currentRight;
+                updateMatchState(updated);
+            };
+
+            return (
+                <div class="space-y-4">
+                    {/* Select active match dropdown */}
+                    <div class="flex items-center justify-between bg-slate-900 border border-slate-800 p-3 rounded-xl text-xs">
+                        <span class="text-slate-400">المباراة الحالية:</span>
+                        <select value={activeMatch.id} onChange={e=>setSelectedMatchId(e.target.value)} class="bg-slate-950 text-rose-400 font-bold p-1 rounded">
+                            {matches.map(m=><option key={m.id} value={m.id}>{m.player1} vs {m.player2} ({m.court})</option>)}
+                        </select>
+                    </div>
+
+                    {/* Referee Chair Board Panel */}
+                    <div class="bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-4 text-center">
+                        <div class="flex justify-between items-center text-xs text-slate-400 pb-2 border-b border-slate-800">
+                            <span>الحكم: <strong class="text-white">{activeMatch.referee}</strong></span>
+                            <span>{activeMatch.court}</span>
+                        </div>
+
+                        {/* Interactive Court Score Display */}
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                                <span class="text-[10px] text-slate-500 font-bold">اليمين ({activeMatch.sides.right === 'p1' ? 'اللاعب 1' : 'اللاعب 2'})</span>
+                                <p class="font-extrabold text-sm text-white">{activeMatch[activeMatch.sides.right === 'p1' ? 'player1' : 'player2']}</p>
+                                <p class="text-3xl font-black text-rose-500">{activeMatch.score[activeMatch.sides.right === 'p1' ? 'p1Points' : 'p2Points']}</p>
+                                <button onClick={()=>addPoint(activeMatch.sides.right)} class="w-full py-4 bg-rose-600 active:bg-rose-700 text-white font-extrabold rounded-xl text-sm shadow-lg">+ نقطة</button>
+                            </div>
+
+                            <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                                <span class="text-[10px] text-slate-500 font-bold">اليسار ({activeMatch.sides.left === 'p1' ? 'اللاعب 1' : 'اللاعب 2'})</span>
+                                <p class="font-extrabold text-sm text-white">{activeMatch[activeMatch.sides.left === 'p1' ? 'player1' : 'player2']}</p>
+                                <p class="text-3xl font-black text-rose-500">{activeMatch.score[activeMatch.sides.left === 'p1' ? 'p1Points' : 'p2Points']}</p>
+                                <button onClick={()=>addPoint(activeMatch.sides.left)} class="w-full py-4 bg-rose-600 active:bg-rose-700 text-white font-extrabold rounded-xl text-sm shadow-lg">+ نقطة</button>
+                            </div>
+                        </div>
+
+                        {/* Actions Control */}
+                        <div class="grid grid-cols-2 gap-2 text-xs">
+                            <button onClick={swapSides} class="py-2.5 bg-slate-800 text-slate-300 font-bold rounded-xl">تبديل الأطراف (اليمين/اليسار) 🔄</button>
+                            <button onClick={()=>{
+                                const updated = JSON.parse(JSON.stringify(activeMatch));
+                                updated.server = updated.server === 'p1' ? 'p2' : 'p1';
+                                updateMatchState(updated);
+                            }} class="py-2.5 bg-slate-800 text-slate-300 font-bold rounded-xl">تبديل الإرسال 🎾</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- 3. SPECTATOR REAL-TIME DISPLAY PANEL ---
+        function SpectatorPanel({ activeMatch }) {
+            if (!activeMatch) return <div class="text-center py-10 text-xs text-slate-400">لا تتوفر تفاصيل مباراة مباشرة الآن.</div>;
+
+            return (
+                <div class="space-y-4">
+                    <div class="bg-slate-900 border border-slate-800 p-6 rounded-3xl text-center space-y-4">
+                        <span class="inline-block px-3 py-1 bg-rose-950 text-rose-400 border border-rose-900 text-[10px] font-extrabold rounded-full animate-pulse">مباشر الآن 🔴</span>
+                        
+                        <h2 class="text-sm font-bold text-slate-400">{activeMatch.court}</h2>
+
+                        {/* Live Score Board */}
+                        <div class="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-4">
+                            <div class="flex justify-between items-center text-sm font-extrabold">
+                                <span class="flex items-center space-x-2 space-x-reverse">
+                                    {activeMatch.server === 'p1' && <span class="text-xs">🎾</span>}
+                                    <span>{activeMatch.player1}</span>
+                                </span>
+                                <div class="flex items-center space-x-3 space-x-reverse">
+                                    <span class="text-slate-500 font-normal text-xs">{activeMatch.score.p1Games} شوط</span>
+                                    <span class="text-2xl font-black text-rose-500 w-10">{activeMatch.score.p1Points}</span>
+                                </div>
+                            </div>
+
+                            <div class="border-t border-slate-800"></div>
+
+                            <div class="flex justify-between items-center text-sm font-extrabold">
+                                <span class="flex items-center space-x-2 space-x-reverse">
+                                    {activeMatch.server === 'p2' && <span class="text-xs">🎾</span>}
+                                    <span>{activeMatch.player2}</span>
+                                </span>
+                                <div class="flex items-center space-x-3 space-x-reverse">
+                                    <span class="text-slate-500 font-normal text-xs">{activeMatch.score.p2Games} شوط</span>
+                                    <span class="text-2xl font-black text-rose-500 w-10">{activeMatch.score.p2Points}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Sets Record */}
+                        <div class="flex justify-center space-x-2 space-x-reverse text-xs text-slate-400">
+                            <span>المجموعات:</span>
+                            <span class="font-bold text-white">{activeMatch.score.p1Sets} - {activeMatch.score.p2Sets}</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
